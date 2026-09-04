@@ -32,25 +32,149 @@ import {
   TECH_TUESDAY_LINK,
   MIDNIGHT_MADNESS_LINK,
   TAP_IN_THURSDAY_LINK,
+  TAX_SOFTWARE_FUNNEL_LINK,
 } from "@/lib/constants";
+
+const weeklySchedule = [
+  {
+    id: "mon",
+    dayName: "Monday",
+    title: "Open Office Hours",
+    desc: "Bring your filing questions and get live support — return walkthroughs, IRS updates, and complex form guidance.",
+    time: "9:00 AM EST",
+    pillar: "General Support",
+    byDay: "MO",
+  },
+  {
+    id: "tue",
+    dayName: "Tuesday",
+    title: "Tech Tuesday",
+    desc: "Sync CRMs, automate client follow-ups, add calendar scheduling, and cut admin time with modern tools.",
+    time: "11:00 AM EST",
+    pillar: "Tax Business Automation",
+    byDay: "TU",
+  },
+  {
+    id: "wed",
+    dayName: "Wednesday",
+    title: "Feature Trainings & Midnight Madness",
+    desc: "Deep-dive feature trainings and Midnight Madness software training, running from 10:00 PM EST through midnight. Sessions recorded for members.",
+    time: "10:00 PM – 12:00 AM EST",
+    pillar: "Software Training",
+    byDay: "WE",
+  },
+  {
+    id: "thu",
+    dayName: "Thursday",
+    title: "Tap In Thursday",
+    desc: "Live coworking and coaching. Network with other owners, share wins, and review your operations and marketing.",
+    time: "7:00 PM EST",
+    pillar: "Networking & Coaching",
+    byDay: "TH",
+  },
+  {
+    id: "fri",
+    dayName: "Friday",
+    title: "Ask an Attorney",
+    desc: "Live legal Q&A with our allied tax & corporate attorneys. Review business structure setups, contract compliance, and ERO regulations. *(Held on the 2nd Friday of each month. Guidance only, not legal representation.)*",
+    time: "12:00 PM EST",
+    frequency: "2nd Friday of each month",
+    pillar: "Legal & Entity Structure",
+    byDay: "FR",
+  },
+];
+
+// Scroll steps through the week in this order.
+const DAY_IDS = weeklySchedule.map((item) => item.id);
 
 export default function OpenOfficePage() {
   const { openModal } = useModal();
   const [activeDay, setActiveDay] = useState("mon");
   const pageRef = useRef<HTMLDivElement>(null);
   const statsContainerRef = useRef<HTMLDivElement>(null);
+  const scheduleRef = useRef<HTMLDivElement>(null);
+  // Last weekday index the scroll driver committed, so onUpdate only calls
+  // setActiveDay when the day actually changes instead of every scroll frame.
+  const scrollDayIndexRef = useRef(-1);
 
   // Stats refs for counting animation
   const membersValRef = useRef<HTMLSpanElement>(null);
   const sessionsValRef = useRef<HTMLSpanElement>(null);
   const supportValRef = useRef<HTMLSpanElement>(null);
 
-  // Auto-detect current weekday on client load
+  // Auto-detect current weekday on client load, so the card opens on today's
+  // session rather than always on Monday. Weekends fall back to Monday.
   useEffect(() => {
     const dayIndex = new Date().getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
-    const daysMap = ["mon", "mon", "tue", "wed", "thu", "fri", "mon"]; // map weekend to Monday
+    const daysMap = ["mon", "mon", "tue", "wed", "thu", "fri", "mon"];
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setActiveDay(daysMap[dayIndex]);
+  }, []);
+
+  // Step the weekly schedule Mon → Fri from scroll position. The schedule card
+  // pins in place and each fifth of the pinned scroll distance advances one
+  // weekday, so the detail panel on the right walks through the week as the
+  // user scrolls past. Desktop only: below lg the card stacks taller than the
+  // viewport, where pinning fights the page scroll — there, tapping a day
+  // stays the interaction. Also skipped for prefers-reduced-motion.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    gsap.registerPlugin(ScrollTrigger);
+
+    const mm = gsap.matchMedia();
+
+    mm.add(
+      "(min-width: 1024px) and (prefers-reduced-motion: no-preference)",
+      () => {
+        if (!scheduleRef.current) return;
+
+        const trigger = ScrollTrigger.create({
+          trigger: scheduleRef.current,
+          // Clears the sticky h-20 navbar so the pinned card is never behind it.
+          start: "top top+=96",
+          end: () => `+=${DAY_IDS.length * 260}`,
+          pin: true,
+          pinSpacing: true,
+          anticipatePin: 1,
+          invalidateOnRefresh: true,
+          onUpdate: (self) => {
+            // Reaching the section sits at progress 0, which maps to Monday.
+            // Hold today's weekday until the user actually scrolls into the
+            // sequence, so the card opens on the session that is live today.
+            if (self.progress <= 0 && scrollDayIndexRef.current === -1) return;
+
+            const index = Math.min(
+              DAY_IDS.length - 1,
+              Math.max(0, Math.floor(self.progress * DAY_IDS.length))
+            );
+            if (index === scrollDayIndexRef.current) return;
+            scrollDayIndexRef.current = index;
+            setActiveDay(DAY_IDS[index]);
+          },
+        });
+
+        // ScrollTrigger caches start/end when the trigger is created. Reaching
+        // this page by client-side navigation creates it after the window
+        // "load" that ScrollTrigger normally refreshes on, so the hero media
+        // above can still shift the page afterwards and leave those offsets
+        // stale. Refresh once the document is done.
+        const refresh = () => ScrollTrigger.refresh();
+        if (document.readyState === "complete") {
+          refresh();
+        } else {
+          window.addEventListener("load", refresh, { once: true });
+        }
+
+        return () => {
+          window.removeEventListener("load", refresh);
+          trigger.kill();
+        };
+      }
+    );
+
+    return () => {
+      mm.revert();
+    };
   }, []);
 
   useEffect(() => {
@@ -108,59 +232,13 @@ export default function OpenOfficePage() {
       }
     });
 
+    // Revert only what this context created. The previous cleanup called
+    // ScrollTrigger.getAll().forEach(t => t.kill()), which also killed the
+    // schedule's pin trigger and left its pin-spacer behind as dead markup.
     return () => {
-      ScrollTrigger.getAll().forEach((t) => t.kill());
+      ctx.revert();
     };
   }, []);
-
-  const weeklySchedule = [
-    {
-      id: "mon",
-      dayName: "Monday",
-      title: "Open Office Hours",
-      desc: "Bring your filing questions and get live support — return walkthroughs, IRS updates, and complex form guidance.",
-      time: "9:00 AM EST",
-      pillar: "General Support",
-      byDay: "MO",
-    },
-    {
-      id: "tue",
-      dayName: "Tuesday",
-      title: "Tech Tuesday",
-      desc: "Sync CRMs, automate client follow-ups, add calendar scheduling, and cut admin time with modern tools.",
-      time: "11:00 AM EST",
-      pillar: "Tax Business Automation",
-      byDay: "TU",
-    },
-    {
-      id: "wed",
-      dayName: "Wednesday",
-      title: "Feature Trainings & Midnight Madness",
-      desc: "Deep-dive feature trainings and Midnight Madness software training, running from 10:00 PM EST through midnight. Sessions recorded for members.",
-      time: "10:00 PM – 12:00 AM EST",
-      pillar: "Software Training",
-      byDay: "WE",
-    },
-    {
-      id: "thu",
-      dayName: "Thursday",
-      title: "Tap In Thursday",
-      desc: "Live coworking and coaching. Network with other owners, share wins, and review your operations and marketing.",
-      time: "7:00 PM EST",
-      pillar: "Networking & Coaching",
-      byDay: "TH",
-    },
-    {
-      id: "fri",
-      dayName: "Friday",
-      title: "Ask an Attorney",
-      desc: "Live legal Q&A with our allied tax & corporate attorneys. Review business structure setups, contract compliance, and ERO regulations. *(Held on the 2nd Friday of each month. Guidance only, not legal representation.)*",
-      time: "12:00 PM EST",
-      frequency: "2nd Friday of each month",
-      pillar: "Legal & Entity Structure",
-      byDay: "FR",
-    },
-  ];
 
   const communityBenefits = [
     {
@@ -399,162 +477,175 @@ export default function OpenOfficePage() {
         </div>
 
         {/* Weekly Programming Interactive Component */}
-        <div className="gsap-reveal glass-card p-8 md:p-12 relative overflow-hidden">
-          <div className="text-center max-w-2xl mx-auto mb-10">
-            <h2 className="text-xl font-bold text-white uppercase tracking-wider">Weekly Live Schedule</h2>
-            <p className="text-xs text-[#EDE9E0]/50 mt-1">Click any day for session details and perks.</p>
-          </div>
+        {/* Wrapper is the pin target — keeps ScrollTrigger's pin transform off
+            the card, which carries its own gsap-reveal entrance transform. */}
+        <div ref={scheduleRef}>
+          <div className="gsap-reveal glass-card p-8 md:p-12 relative overflow-hidden">
+            <div className="text-center max-w-2xl mx-auto mb-10">
+              <h2 className="text-xl font-bold text-white uppercase tracking-wider">Weekly Live Schedule</h2>
+              <p className="text-xs text-[#EDE9E0]/50 mt-1">Scroll to move through Monday to Friday, or click any day for session details and perks.</p>
+            </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
 
-            {/* Left: Calendar Grid (Mon–Fri) */}
-            <div className="lg:col-span-2">
-              {/* Calendar chrome header */}
-              <div className="bg-[#161412] border border-[#FFB26A]/30 rounded-2xl overflow-hidden shadow-2xl shadow-black/50">
-                {/* Window header bar */}
-                <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#FFB26A]/20 bg-[#0F0D0C]">
-                  <div className="flex items-center gap-2">
-                    <CalendarDays className="w-4 h-4 text-[#FFB26A]" />
-                    <span className="text-xs font-bold text-white uppercase tracking-widest">Open Office · Weekly</span>
-                  </div>
-                  <span className="text-xs font-mono text-[#EDE9E0]/50 bg-[#FFB26A]/10 border border-[#FFB26A]/20 px-2 py-1 rounded">Mon – Fri · Recurring</span>
-                </div>
-
-                {/* Day column headers */}
-                <div className="grid grid-cols-5 border-b border-[#FFB26A]/20">
-                  {weeklySchedule.map((item) => (
-                    <div
-                      key={item.id}
-                      className={`text-center py-2 text-xs font-bold uppercase tracking-widest border-r border-[#FFB26A]/10 last:border-r-0 ${
-                        activeDay === item.id ? "text-[#FFB26A]" : "text-[#EDE9E0]/40"
-                      }`}
-                    >
-                      {item.dayName.slice(0, 3)}
+              {/* Left: Calendar Grid (Mon–Fri) */}
+              <div className="lg:col-span-2">
+                {/* Calendar chrome header */}
+                <div className="bg-[#161412] border border-[#FFB26A]/30 rounded-2xl overflow-hidden shadow-2xl shadow-black/50">
+                  {/* Window header bar */}
+                  <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#FFB26A]/20 bg-[#0F0D0C]">
+                    <div className="flex items-center gap-2">
+                      <CalendarDays className="w-4 h-4 text-[#FFB26A]" />
+                      <span className="text-xs font-bold text-white uppercase tracking-widest">Open Office · Weekly</span>
                     </div>
-                  ))}
-                </div>
+                    <span className="text-xs font-mono text-[#EDE9E0]/50 bg-[#FFB26A]/10 border border-[#FFB26A]/20 px-2 py-1 rounded">Mon – Fri · Recurring</span>
+                  </div>
 
-                {/* Calendar day cells */}
-                <div className="grid grid-cols-5">
-                  {weeklySchedule.map((item, idx) => {
-                    const isActive = activeDay === item.id;
-                    return (
-                      <button
+                  {/* Day column headers */}
+                  <div className="grid grid-cols-5 border-b border-[#FFB26A]/20">
+                    {weeklySchedule.map((item) => (
+                      <div
                         key={item.id}
-                        onClick={() => setActiveDay(item.id)}
-                        className={`group relative flex flex-col items-start p-3 sm:p-4 border-r border-b border-[#FFB26A]/10 last:border-r-0 text-left transition-all duration-200 cursor-pointer min-h-[160px] ${
-                          isActive
-                            ? "bg-[#FFB26A]/10 border-b-[#FFB26A]/40"
-                            : "hover:bg-[#FFB26A]/5"
+                        className={`text-center py-2 text-xs font-bold uppercase tracking-widest border-r border-[#FFB26A]/10 last:border-r-0 ${
+                          activeDay === item.id ? "text-[#FFB26A]" : "text-[#EDE9E0]/40"
                         }`}
                       >
-                        {/* Day number */}
-                        <span className={`text-base font-black font-mono mb-2 leading-none w-7 h-7 flex items-center justify-center rounded-full transition-all ${
-                          isActive ? "bg-[#FFB26A] text-black" : "text-[#EDE9E0]/40 group-hover:text-[#EDE9E0]/60"
-                        }`}>
-                          {idx + 1}
-                        </span>
+                        {item.dayName.slice(0, 3)}
+                      </div>
+                    ))}
+                  </div>
 
-                        {/* Time badge */}
-                        <span className={`text-xs font-mono mb-2 flex items-center gap-1 ${isActive ? "text-[#FFB26A]" : "text-[#EDE9E0]/40 group-hover:text-[#EDE9E0]/50"}`}>
-                          <Clock className="w-2.5 h-2.5 shrink-0" />
-                          {item.time}
-                        </span>
+                  {/* Calendar day cells */}
+                  <div className="grid grid-cols-5">
+                    {weeklySchedule.map((item, idx) => {
+                      const isActive = activeDay === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => setActiveDay(item.id)}
+                          className={`group relative flex flex-col items-start p-3 sm:p-4 border-r border-b border-[#FFB26A]/10 last:border-r-0 text-left transition-all duration-200 cursor-pointer min-h-[160px] ${
+                            isActive
+                              ? "bg-[#FFB26A]/10 border-b-[#FFB26A]/40"
+                              : "hover:bg-[#FFB26A]/5"
+                          }`}
+                        >
+                          {/* Day number */}
+                          <span className={`text-base font-black font-mono mb-2 leading-none w-7 h-7 flex items-center justify-center rounded-full transition-all ${
+                            isActive ? "bg-[#FFB26A] text-black" : "text-[#EDE9E0]/40 group-hover:text-[#EDE9E0]/60"
+                          }`}>
+                            {idx + 1}
+                          </span>
 
-                        {/* Session title */}
-                        <p className={`text-xs font-bold uppercase tracking-wide leading-tight line-clamp-2 ${
-                          isActive ? "text-white" : "text-[#EDE9E0]/40 group-hover:text-[#EDE9E0]/60"
-                        }`}>
-                          {item.title}
-                        </p>
+                          {/* Time badge */}
+                          <span className={`text-xs font-mono mb-2 flex items-center gap-1 ${isActive ? "text-[#FFB26A]" : "text-[#EDE9E0]/40 group-hover:text-[#EDE9E0]/50"}`}>
+                            <Clock className="w-2.5 h-2.5 shrink-0" />
+                            {item.time}
+                          </span>
 
-                        {/* Pillar tag */}
-                        <span className={`mt-auto pt-2 text-[7px] font-semibold uppercase tracking-wider leading-tight line-clamp-1 ${
-                          isActive ? "text-[#FFB26A]" : "text-[#EDE9E0]/35 group-hover:text-[#EDE9E0]/40"
-                        }`}>
-                          {item.pillar}
-                        </span>
+                          {/* Session title */}
+                          <p className={`text-xs font-bold uppercase tracking-wide leading-tight line-clamp-2 ${
+                            isActive ? "text-white" : "text-[#EDE9E0]/40 group-hover:text-[#EDE9E0]/60"
+                          }`}>
+                            {item.title}
+                          </p>
 
-                        {/* Active indicator dot */}
-                        {isActive && (
-                          <span className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full bg-[#FFB26A] animate-pulse" />
-                        )}
-                      </button>
-                    );
-                  })}
+                          {/* Pillar tag */}
+                          <span className={`mt-auto pt-2 text-[7px] font-semibold uppercase tracking-wider leading-tight line-clamp-1 ${
+                            isActive ? "text-[#FFB26A]" : "text-[#EDE9E0]/35 group-hover:text-[#EDE9E0]/40"
+                          }`}>
+                            {item.pillar}
+                          </span>
+
+                          {/* Active indicator dot */}
+                          {isActive && (
+                            <span className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full bg-[#FFB26A] animate-pulse" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Right: Detail + Perks Panel */}
-            <div className="bg-[#161412] border border-[#FFB26A]/30 rounded-2xl overflow-hidden shadow-2xl shadow-black/50 flex flex-col">
-              {/* Window header bar */}
-              <div className="px-5 py-3.5 border-b border-[#FFB26A]/20 bg-[#0F0D0C] flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#FFB26A] animate-pulse" />
-                <span className="text-xs font-bold uppercase tracking-widest text-[#EDE9E0]/60">Session Details</span>
-              </div>
+              {/* Right: Detail + Perks Panel */}
+              <div className="bg-[#161412] border border-[#FFB26A]/30 rounded-2xl overflow-hidden shadow-2xl shadow-black/50 flex flex-col">
+                {/* Window header bar */}
+                <div className="px-5 py-3.5 border-b border-[#FFB26A]/20 bg-[#0F0D0C] flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#FFB26A] animate-pulse" />
+                  <span className="text-xs font-bold uppercase tracking-widest text-[#EDE9E0]/60">Session Details</span>
+                </div>
 
-              {/* Session info */}
-              <div className="p-5 space-y-3 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-[#FFB26A] bg-[#FFB26A]/10 border border-[#FFB26A]/25 px-2.5 py-1 rounded">
-                    {activeDaySchedule.pillar}
-                  </span>
-                  <span className="text-xs text-[#FFB26A] font-mono flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    {activeDaySchedule.time}
-                  </span>
-                  {activeDaySchedule.frequency && (
-                    <span className="text-[10px] text-[#FFB26A] font-mono bg-[#FFB26A]/10 border border-[#FFB26A]/20 px-2 py-0.5 rounded">
-                      {activeDaySchedule.frequency}
+                {/* Session info */}
+                <div className="p-5 space-y-3 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#FFB26A] bg-[#FFB26A]/10 border border-[#FFB26A]/25 px-2.5 py-1 rounded">
+                      {activeDaySchedule.pillar}
                     </span>
-                  )}
-                </div>
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider leading-snug">{activeDaySchedule.title}</h3>
-                <p className="text-xs text-[#EDE9E0]/60 leading-relaxed">{activeDaySchedule.desc}</p>
+                    <span className="text-xs text-[#FFB26A] font-mono flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      {activeDaySchedule.time}
+                    </span>
+                    {activeDaySchedule.frequency && (
+                      <span className="text-[10px] text-[#FFB26A] font-mono bg-[#FFB26A]/10 border border-[#FFB26A]/20 px-2 py-0.5 rounded">
+                        {activeDaySchedule.frequency}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider leading-snug">{activeDaySchedule.title}</h3>
+                  <p className="text-xs text-[#EDE9E0]/60 leading-relaxed">{activeDaySchedule.desc}</p>
 
-                {/* Divider */}
-                <div className="border-t border-[#FFB26A]/20 pt-3">
-                  <h4 className="text-xs font-bold text-[#EDE9E0]/50 uppercase tracking-wider mb-2.5">Participant Perks</h4>
-                  <ul className="space-y-2">
-                    <li className="flex items-center gap-2 text-xs text-[#EDE9E0]/60">
-                      <Check className="w-3.5 h-3.5 text-[#FFB26A] shrink-0" /> Live text-based Q&amp;A
-                    </li>
-                    <li className="flex items-center gap-2 text-xs text-[#EDE9E0]/60">
-                      <Check className="w-3.5 h-3.5 text-[#FFB26A] shrink-0" /> Screen-sharing diagnostics
-                    </li>
-                    <li className="flex items-center gap-2 text-xs text-[#EDE9E0]/60">
-                      <Check className="w-3.5 h-3.5 text-[#FFB26A] shrink-0" /> Replay recordings vault access
-                    </li>
-                  </ul>
+                  {/* Divider */}
+                  <div className="border-t border-[#FFB26A]/20 pt-3">
+                    <h4 className="text-xs font-bold text-[#EDE9E0]/50 uppercase tracking-wider mb-2.5">Participant Perks</h4>
+                    <ul className="space-y-2">
+                      <li className="flex items-center gap-2 text-xs text-[#EDE9E0]/60">
+                        <Check className="w-3.5 h-3.5 text-[#FFB26A] shrink-0" /> Live text-based Q&amp;A
+                      </li>
+                      <li className="flex items-center gap-2 text-xs text-[#EDE9E0]/60">
+                        <Check className="w-3.5 h-3.5 text-[#FFB26A] shrink-0" /> Screen-sharing diagnostics
+                      </li>
+                      <li className="flex items-center gap-2 text-xs text-[#EDE9E0]/60">
+                        <Check className="w-3.5 h-3.5 text-[#FFB26A] shrink-0" /> Replay recordings vault access
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                {/* CTA buttons */}
+                <div className="p-5 pt-0 flex flex-col gap-2 border-t border-[#FFB26A]/20">
+                  {/* <button
+                    onClick={() => downloadIcs(activeDaySchedule)}
+                    className="w-full bg-[#FFB26A] hover:bg-[#F4845F] text-[#140A06] font-extrabold py-2.5 px-4 rounded-lg text-xs transition-colors cursor-pointer uppercase tracking-wider flex items-center justify-center gap-1.5"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add to Calendar (.ics)
+                  </button> */}
+                  {/* Shown for every day Mon–Fri, independent of activeDaySchedule. */}
+                  <a
+                    href={TAX_SOFTWARE_FUNNEL_LINK}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full bg-[#FFB26A] hover:bg-[#F4845F] text-[#140A06] font-extrabold py-2.5 px-4 rounded-lg text-xs transition-colors cursor-pointer uppercase tracking-wider text-center inline-block"
+                  >
+                    Open Office
+                  </a>
+                  <a
+                    href={
+                      activeDaySchedule.id === "tue" ? TECH_TUESDAY_LINK
+                      : activeDaySchedule.id === "wed" ? MIDNIGHT_MADNESS_LINK
+                      : activeDaySchedule.id === "thu" ? TAP_IN_THURSDAY_LINK
+                      : OPEN_OFFICE_ZOOM_LINK
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full bg-[#0A0908] border border-[#FFB26A]/30 text-[#EDE9E0]/70 hover:text-white font-bold py-2 px-4 rounded-lg text-xs transition-colors cursor-pointer uppercase tracking-wider text-center inline-block"
+                  >
+                    Access Stream Details
+                  </a>
                 </div>
               </div>
 
-              {/* CTA buttons */}
-              <div className="p-5 pt-0 flex flex-col gap-2 border-t border-[#FFB26A]/20">
-                {/* <button
-                  onClick={() => downloadIcs(activeDaySchedule)}
-                  className="w-full bg-[#FFB26A] hover:bg-[#F4845F] text-[#140A06] font-extrabold py-2.5 px-4 rounded-lg text-xs transition-colors cursor-pointer uppercase tracking-wider flex items-center justify-center gap-1.5"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Add to Calendar (.ics)
-                </button> */}
-                <a
-                  href={
-                    activeDaySchedule.id === "tue" ? TECH_TUESDAY_LINK
-                    : activeDaySchedule.id === "wed" ? MIDNIGHT_MADNESS_LINK
-                    : activeDaySchedule.id === "thu" ? TAP_IN_THURSDAY_LINK
-                    : OPEN_OFFICE_ZOOM_LINK
-                  }
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full bg-[#0A0908] border border-[#FFB26A]/30 text-[#EDE9E0]/70 hover:text-white font-bold py-2 px-4 rounded-lg text-xs transition-colors cursor-pointer uppercase tracking-wider text-center inline-block"
-                >
-                  Access Stream Details
-                </a>
-              </div>
             </div>
-
           </div>
         </div>
 
