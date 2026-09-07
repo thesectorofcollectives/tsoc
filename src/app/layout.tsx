@@ -59,7 +59,6 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <ModalProvider>
-          <Analytics/>
           <ParticleBackground />
           <Navbar />
           <main className="flex-1 flex flex-col">
@@ -69,6 +68,7 @@ export default function RootLayout({
           <ExitIntentCTA />
           <CursorGlow />
         </ModalProvider>
+        <Analytics />
       </body>
     </html>
   );
