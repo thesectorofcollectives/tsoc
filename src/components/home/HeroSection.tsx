@@ -8,7 +8,7 @@ import { useModal } from "@/context/ModalContext";
 import { useHeroSlider } from "@/hooks/useHeroSlider";
 import { heroSlides } from "@/data/homeData";
 import VideoMeshBackground from "@/components/VideoMeshBackground";
-import { OPEN_OFFICE_COMMUNITY_LINK, TAX_SOFTWARE_LOGIN_LINK, OPEN_OFFICE_MAIN_FUNNEL } from "@/lib/constants";
+import { OPEN_OFFICE_COMMUNITY_LINK, TAX_SOFTWARE_FUNNEL_LINK, OPEN_OFFICE_MAIN_FUNNEL, withUtm } from "@/lib/constants";
 
 /* ─── Inline partner-logo pill ─────────────────────────────────── */
 function PartnerBadge({
@@ -135,7 +135,7 @@ export default function HeroSection() {
                   </a>
                 ) : currentSlide === 1 ? (
                   <a
-                    href={TAX_SOFTWARE_LOGIN_LINK}
+                    href={withUtm(TAX_SOFTWARE_FUNNEL_LINK, "home-hero-software-access")}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center justify-center rounded-lg px-6 py-3.5 text-xs font-extrabold shadow-lg cursor-pointer uppercase tracking-wider transition-all duration-200 text-center"
