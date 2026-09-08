@@ -11,7 +11,7 @@ import FaqAccordion from "@/components/ui/FaqAccordion";
 import TestimonialCarousel from "@/components/TestimonialCarousel";
 import TiltCard from "@/components/motion/TiltCard";
 import VideoMeshBackground from "@/components/VideoMeshBackground";
-import { TAX_SOFTWARE_LOGIN_LINK } from "@/lib/constants";
+import { TAX_SOFTWARE_FUNNEL_LINK, withUtm } from "@/lib/constants";
 
 export default function TaxSoftwarePage() {
   const { openModal } = useModal();
@@ -185,7 +185,7 @@ export default function TaxSoftwarePage() {
               </p>
               <div className="gsap-reveal pt-4">
                 <a
-                  href={TAX_SOFTWARE_LOGIN_LINK}
+                  href={withUtm(TAX_SOFTWARE_FUNNEL_LINK, "tax-software-hero-access")}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center justify-center bg-[#FFB26A] hover:bg-[#F4845F] text-[#140A06] font-extrabold px-6 py-3 rounded-lg text-xs uppercase tracking-wider transition-all cursor-pointer shadow-md text-center"
